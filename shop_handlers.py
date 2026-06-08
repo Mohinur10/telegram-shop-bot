@@ -102,6 +102,7 @@ def register_shop_handlers(bot: telebot.TeleBot):
             session.close()
         bot.answer_callback_query(call.id)
 
+    # ================== TO'G'RILANGAN product_detail ==================
     @bot.callback_query_handler(func=lambda call: call.data.startswith("prod_"))
     def product_detail(call):
         uid = call.from_user.id
@@ -116,14 +117,23 @@ def register_shop_handlers(bot: telebot.TeleBot):
             kb = InlineKeyboardMarkup()
             kb.add(InlineKeyboardButton("🛒 Savatga qo'shish", callback_data=f"add_to_cart_{prod.id}"))
             kb.add(InlineKeyboardButton("🔙 Ortga", callback_data="back_to_products"))
-            if prod.image:
-                bot.send_photo(uid, prod.image, caption=text, parse_mode="HTML", reply_markup=kb)
-                bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
+            
+            # Rasmni xatolik bilan tekshirish
+            if prod.image and len(prod.image) > 5:
+                try:
+                    bot.send_photo(uid, prod.image, caption=text, parse_mode="HTML", reply_markup=kb)
+                    bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
+                except Exception as e:
+                    # Agar rasmda xatolik bo'lsa, matn bilan chiqar
+                    print(f"Rasm xatoligi: {e}")
+                    bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=kb)
             else:
+                # Rasm yo'q yoki noto'g'ri bo'lsa
                 bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=kb)
         finally:
             session.close()
         bot.answer_callback_query(call.id)
+    # ================== TO'G'RILANGAN QISM TUGADI ==================
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith("add_to_cart_"))
     def add_to_cart(call):
