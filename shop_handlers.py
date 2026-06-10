@@ -3,6 +3,8 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 from models import Session, Category, Product, DeliverySettings, PaymentMethod, Order, OrderItem, Cart, CartItem
 from fsm import States, get_state, set_state, clear_state, set_data, get_data, clear_data
 from keyboards import main_menu_kb, confirm_kb
+import logging
+logger = logging.getLogger(__name__)
 
 def register_shop_handlers(bot: telebot.TeleBot):
 
@@ -13,7 +15,7 @@ def register_shop_handlers(bot: telebot.TeleBot):
         clear_state(uid)
         clear_data(uid)
         set_state(uid, States.MAIN_MENU)
-        bot.send_message(uid, "🖐 Assalomu alaykum! Ishonch Market botiga xush kelibsiz.", reply_markup=main_menu_kb())
+        bot.send_message(uid, "🖐 Assalomu alaykum! Bozorcha Super Market botiga xush kelibsiz.", reply_markup=main_menu_kb())
 
     # ----------------------- MAIN MENU -----------------------
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.MAIN_MENU and m.text == "🛒 Xarid qilish")
@@ -79,7 +81,7 @@ def register_shop_handlers(bot: telebot.TeleBot):
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.MAIN_MENU and m.text == "📞 Bog'lanish")
     def contact_info(msg):
         uid = msg.from_user.id
-        text = "📞 <b>Biz bilan bog'lanish:</b>\n\n📱 Telegram: @ishonch_support\n📞 Telefon: +998 90 123 45 67\n🌐 Website: ishonch.uz"
+        text = "📞 <b>Biz bilan bog'lanish:</b>\n\n📱 Telegram: @BarakaSuperMarket\n📞 Telefon: +998 90 123 45 67\n🌐 Website: BarakaSuperMarket.uz"
         bot.send_message(uid, text, parse_mode="HTML")
 
     # ------------------- CATEGORY & PRODUCT -------------------
@@ -87,6 +89,8 @@ def register_shop_handlers(bot: telebot.TeleBot):
     def show_products(call):
         uid = call.from_user.id
         cat_id = int(call.data.split("_")[1])
+        # Store the last selected category for back navigation
+        set_data(uid, "last_cat_id", cat_id)
         session = Session()
         try:
             products = session.query(Product).filter_by(category_id=cat_id).all()
@@ -96,7 +100,7 @@ def register_shop_handlers(bot: telebot.TeleBot):
             kb = InlineKeyboardMarkup()
             for p in products:
                 kb.add(InlineKeyboardButton(f"{p.name} — {p.price:,.0f} so'm", callback_data=f"prod_{p.id}"))
-            kb.add(InlineKeyboardButton("🔙 Ortga", callback_data="back_to_categories"))
+            kb.add(InlineKeyboardButton("🔙 Ortga", callback_data="back_to_products"))
             bot.edit_message_text("Mahsulotni tanlang:", chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=kb)
         finally:
             session.close()
@@ -154,7 +158,13 @@ def register_shop_handlers(bot: telebot.TeleBot):
                 item = CartItem(cart_id=cart.id, product_id=prod_id, quantity=1)
                 session.add(item)
             session.commit()
+            logger.info(f"User {uid} added product {prod_id} to cart (qty {item.quantity})")
             bot.answer_callback_query(call.id, "✅ Savatga qo'shildi!", show_alert=False)
+            # Show updated cart
+            view_cart_from_callback(call, bot)
+        except Exception as e:
+            logger.error(f"Error adding to cart for user {uid}: {e}")
+            bot.answer_callback_query(call.id, "❌ Xatolik yuz berdi.", show_alert=True)
         finally:
             session.close()
 
@@ -177,7 +187,21 @@ def register_shop_handlers(bot: telebot.TeleBot):
 
     @bot.callback_query_handler(func=lambda call: call.data == "back_to_products")
     def back_to_products(call):
-        back_to_categories(call)
+        uid = call.from_user.id
+        # Retrieve previously stored category ID and show its products
+        cat_id = get_data(uid, "last_cat_id")
+        if cat_id:
+            # Simulate a callback with the same data format as show_products expects
+            mock_call = type('MockCall', (object,), {
+                'from_user': type('User', (object,), {'id': uid}),
+                'message': call.message,
+                'id': call.id,
+                'data': f"cat_{cat_id}"
+            })
+            show_products(mock_call)
+        else:
+            # Fallback to category list
+            back_to_categories(call)
 
     # ----------------------- CART (inline) -----------------------
     @bot.callback_query_handler(func=lambda call: call.data.startswith("cart_remove_"))
@@ -364,11 +388,16 @@ def register_shop_handlers(bot: telebot.TeleBot):
             return
 
         if msg.location:
-            address = f"Lat: {msg.location.latitude}, Lon: {msg.location.longitude}"
+            lat = msg.location.latitude
+            lon = msg.location.longitude
+            address = f"Lat: {lat}, Lon: {lon}"
         else:
+            lat = None
+            lon = None
             address = msg.text.strip()
-
         set_data(uid, "order_address", address)
+        set_data(uid, "order_latitude", lat)
+        set_data(uid, "order_longitude", lon)
         set_state(uid, States.ORDER_PAYMENT)
 
         # To'lov usullarini ko'rsatish (inline)
@@ -398,22 +427,16 @@ def register_shop_handlers(bot: telebot.TeleBot):
                 return
             set_data(uid, "order_payment_id", payment.id)
 
-            # buyurtma ma'lumotlarini yig'ish va tasdiqlash
             cart_id = get_data(uid, "order_cart_id")
             delivery_id = get_data(uid, "order_delivery_id")
             phone = get_data(uid, "order_phone")
             address = get_data(uid, "order_address")
 
             cart = session.query(Cart).filter_by(id=cart_id).first()
-            if not cart or not cart.items:
-                bot.send_message(uid, "❌ Savat topilmadi yoki bo'sh.")
-                clear_state(uid); clear_data(uid)
-                return
-
-            total = sum(ci.product.price * ci.quantity for ci in cart.items)
             delivery = session.query(DeliverySettings).filter_by(id=delivery_id).first()
-            delivery_price = delivery.price if delivery else 0
-            total += delivery_price
+            
+            total = sum(ci.product.price * ci.quantity for ci in cart.items) + delivery.price
+            delivery_price = delivery.price
 
             items_text = "\n".join(f"• {ci.product.name} x{ci.quantity} = {ci.product.price * ci.quantity:,.0f} so'm" for ci in cart.items)
             confirm_text = (
@@ -460,11 +483,16 @@ def register_shop_handlers(bot: telebot.TeleBot):
                     bot.send_message(uid, "❌ Xatolik yuz berdi.")
                     clear_state(uid); clear_data(uid)
                     return
+                # Retrieve stored latitude and longitude from FSM data
+                lat = get_data(uid, "order_latitude")
+                lon = get_data(uid, "order_longitude")
                 order = Order(
                     user_id=uid,
                     user_name=msg.from_user.first_name,
                     phone=phone,
                     address=address,
+                    latitude=lat,
+                    longitude=lon,
                     delivery_id=delivery_id,
                     payment_id=payment_id,
                     total=total,

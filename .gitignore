@@ -15,10 +15,7 @@ venv/
 # Database (local)
 *.db
 ishonch.db
-ishop.db
+ishonch.db-journal
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
+# Lock files
+bot.lock

@@ -1,6 +1,6 @@
 import os
 import bcrypt
-from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Text
+from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Float, Boolean, ForeignKey, DateTime, Text
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from sqlalchemy.sql import func
 from dotenv import load_dotenv
@@ -57,7 +57,7 @@ class Product(Base):
 class Cart(Base):
     __tablename__ = "carts"
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, unique=True, nullable=False)
+    user_id = Column(BigInteger, unique=True, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
     items = relationship("CartItem", back_populates="cart", cascade="all, delete-orphan")
 
@@ -92,7 +92,7 @@ class PaymentMethod(Base):
 class Order(Base):
     __tablename__ = "orders"
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, nullable=False)
+    user_id = Column(BigInteger, nullable=False)
     user_name = Column(String(200), nullable=True)
     phone = Column(String(50), nullable=True)
     address = Column(Text, nullable=True)
@@ -121,9 +121,28 @@ class OrderItem(Base):
 
 
 def init_db():
+    # Drop all tables to ensure correct column types (especially BIGINT for user_id)
+    Base.metadata.drop_all(engine)
+    # Recreate tables according to current models
     Base.metadata.create_all(engine)
     session = Session()
     try:
+        # Ensure at least one delivery option exists
+        delivery = session.query(DeliverySettings).first()
+        if delivery is None:
+            default_delivery = DeliverySettings(name='Standard', price=0.0, is_active=True)
+            session.add(default_delivery)
+            session.commit()
+            print(f"[DB] Default delivery created: {default_delivery.name}")
+
+        # Ensure at least one payment method exists
+        payment = session.query(PaymentMethod).first()
+        if payment is None:
+            default_payment = PaymentMethod(name='Cash', details='Pay on delivery', is_active=True)
+            session.add(default_payment)
+            session.commit()
+            print(f"[DB] Default payment method created: {default_payment.name}")
+
         admin = session.query(Admin).first()
         if admin is None:
             admin = Admin(username=os.getenv("ADMIN_USERNAME", "admin"))

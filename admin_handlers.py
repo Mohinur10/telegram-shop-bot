@@ -48,8 +48,11 @@ def register_admin_handlers(bot: telebot.TeleBot):
 
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ADMIN_PANEL and m.text == "🚪 Chiqish")
     def admin_logout(msg):
-        clear_state(msg.from_user.id)
-        bot.send_message(msg.from_user.id, "👋 Chiqdingiz.", reply_markup=telebot.types.ReplyKeyboardRemove())
+        uid = msg.from_user.id
+        clear_state(uid)
+        # Reset daily‑stats flag so future requests work again
+        set_data(uid, "daily_stats_sent", False)
+        bot.send_message(uid, "👋 Chiqdingiz.", reply_markup=telebot.types.ReplyKeyboardRemove())
 
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ADMIN_PANEL and m.text == "📂 Kategoriyalar")
     def admin_categories(msg):
@@ -427,6 +430,11 @@ def register_admin_handlers(bot: telebot.TeleBot):
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ADMIN_PANEL and m.text == "📊 Bir kunlik statistika")
     def admin_daily_stats(msg):
         uid = msg.from_user.id
+        # Prevent sending duplicate stats in the same session
+        if get_data(uid, "daily_stats_sent", False):
+            bot.send_message(uid, "⚠️ Statistikani avval ham yuborilgan.", reply_markup=admin_main_kb())
+            return
+
         from datetime import datetime
         from collections import Counter
         today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -459,6 +467,8 @@ def register_admin_handlers(bot: telebot.TeleBot):
             text = "\n".join(lines)
         finally:
             session.close()
+        # Mark that stats have been sent for this admin session
+        set_data(uid, "daily_stats_sent", True)
         bot.send_message(uid, text, parse_mode="HTML", reply_markup=admin_main_kb())
 
     @bot.callback_query_handler(func=lambda c: c.data == "add_new")

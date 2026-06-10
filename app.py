@@ -2,6 +2,7 @@ import os
 import time
 import logging
 import threading
+import atexit
 import telebot
 from flask import Flask, jsonify
 from dotenv import load_dotenv
@@ -26,6 +27,11 @@ app = Flask(__name__)
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "bot": "running"}), 200
+
+# Optional lightweight ping endpoint for UptimeRobot
+@app.route('/ping')
+def ping():
+    return 'pong', 200
 
 # ---------- TELEGRAM BOT ----------
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -53,7 +59,7 @@ def run_bot():
     logger.info("Bot polling started...")
     while True:
         try:
-            bot.infinity_polling(timeout=60, long_polling_timeout=60, interval=1)
+            bot.infinity_polling(timeout=60, long_polling_timeout=60, interval=0.3)
         except Exception as e:
             logger.error(f"Polling crashed: {e}")
             logger.info("Restarting polling in 5 seconds...")
@@ -67,10 +73,18 @@ def start_bot_thread():
         t.start()
         logger.info("Bot thread launched.")
 
-# Bot threadini ishga tushirish (gunicorn yoki to'g'ridan-to'g'ri run uchun)
+# Start bot thread immediately so it runs with the Flask app
+lock_file = os.path.join(os.path.dirname(__file__), 'bot.lock')
+if os.path.exists(lock_file):
+    logger.warning("Stale lock file detected. Removing it to allow fresh start.")
+    os.remove(lock_file)
+# Create lock file to prevent duplicate instances
+open(lock_file, 'w').close()
 start_bot_thread()
 
 # ---------- LOCAL ISHGA TUSHIRISH ----------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+# Cleanup lock file on exit
+atexit.register(lambda: os.path.exists(lock_file) and os.remove(lock_file))
