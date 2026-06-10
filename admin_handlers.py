@@ -187,7 +187,8 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 name=get_data(uid, "new_prod_name"),
                 description=get_data(uid, "new_prod_desc"),
                 price=get_data(uid, "new_prod_price"),
-                image=get_data(uid, "new_prod_image"),
+                image=None,  # Preserve old column for backward compatibility
+                image_file_id=get_data(uid, "new_prod_image"),
                 category_id=cat.id,
             )
             session.add(prod)

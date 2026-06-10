@@ -122,17 +122,22 @@ def register_shop_handlers(bot: telebot.TeleBot):
             kb.add(InlineKeyboardButton("🛒 Savatga qo'shish", callback_data=f"add_to_cart_{prod.id}"))
             kb.add(InlineKeyboardButton("🔙 Ortga", callback_data="back_to_products"))
             
-            # Rasmni xatolik bilan tekshirish
-            if prod.image and len(prod.image) > 5:
+            # Image handling: prefer Telegram file_id, fallback to legacy image URL
+            if prod.image_file_id:
+                try:
+                    bot.send_photo(uid, prod.image_file_id, caption=text, parse_mode="HTML", reply_markup=kb)
+                    bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
+                except Exception as e:
+                    print(f"Telegram image send error: {e}")
+                    bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=kb)
+            elif prod.image and len(prod.image) > 5:
                 try:
                     bot.send_photo(uid, prod.image, caption=text, parse_mode="HTML", reply_markup=kb)
                     bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
                 except Exception as e:
-                    # Agar rasmda xatolik bo'lsa, matn bilan chiqar
-                    print(f"Rasm xatoligi: {e}")
+                    print(f"Legacy image send error: {e}")
                     bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=kb)
             else:
-                # Rasm yo'q yoki noto'g'ri bo'lsa
                 bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=kb)
         finally:
             session.close()
