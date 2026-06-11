@@ -65,8 +65,8 @@ class Product(Base):
     name = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
     price = Column(Float, nullable=False)
-    image = Column(String, nullable=True)
-    image_file_id = Column(String, nullable=True)  # New column for Telegram file_id
+    image = Column(String, nullable=True)          # legacy / URL
+    image_file_id = Column(String, nullable=True) # Telegra.ph URL yoki file_id
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
     category = relationship("Category", back_populates="products")
 
@@ -138,27 +138,22 @@ class OrderItem(Base):
 
 
 def init_db():
-    # Recreate tables according to current models
-
-    # Recreate tables according to current models
     Base.metadata.create_all(engine)
     session = Session()
     try:
-        # Ensure at least one delivery option exists
         delivery = session.query(DeliverySettings).first()
         if delivery is None:
-            default_delivery = DeliverySettings(name='Standard', price=0.0, is_active=True)
+            default_delivery = DeliverySettings(name='Standart', price=0.0, is_active=True)
             session.add(default_delivery)
             session.commit()
-            print(f"[DB] Default delivery created: {default_delivery.name}")
+            print("[DB] Default delivery created")
 
-        # Ensure at least one payment method exists
         payment = session.query(PaymentMethod).first()
         if payment is None:
-            default_payment = PaymentMethod(name='Cash', details='Pay on delivery', is_active=True)
+            default_payment = PaymentMethod(name='Naqd', details='Yetkazib berishda naqd toʻlov', is_active=True)
             session.add(default_payment)
             session.commit()
-            print(f"[DB] Default payment method created: {default_payment.name}")
+            print("[DB] Default payment method created")
 
         admin = session.query(Admin).first()
         if admin is None:
@@ -170,7 +165,7 @@ def init_db():
         else:
             admin.set_password(os.getenv("ADMIN_PASSWORD", "admin123"))
             session.commit()
-            print(f"[DB] Admin password updated")
+            print("[DB] Admin password updated")
     except Exception as e:
         print(f"[DB] Error: {e}")
         session.rollback()
