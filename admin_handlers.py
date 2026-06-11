@@ -1,13 +1,20 @@
 import telebot
 from models import Session, Admin, Category, Product, DeliverySettings, PaymentMethod, Order, OrderItem, News, User
 from fsm import States, get_state, set_state, clear_state, set_data, get_data, clear_data
-from keyboards import admin_main_kb, admin_crud_kb, admin_orders_kb, order_status_kb
+from keyboards import admin_main_kb, admin_crud_kb, admin_orders_kb, order_status_kb, back_kb
 from utils import upload_to_telegraph
 
 def register_admin_handlers(bot: telebot.TeleBot):
     def is_admin(uid):
         state = get_state(uid)
-        return state == States.ADMIN_PANEL or (state or "").startswith("admin_")
+        return state == States.ADMIN_PANEL or (state or "").startswith("admin_") or (state or "").startswith("news_")
+
+    @bot.message_handler(func=lambda m: m.text in ["🔙 Orqaga", "🔙 Ortga"] and is_admin(m.from_user.id))
+    def admin_global_back(msg):
+        uid = msg.from_user.id
+        clear_data(uid)
+        set_state(uid, States.ADMIN_PANEL)
+        bot.send_message(uid, "🔙 Bekor qilindi. Bosh menyuga qaytdingiz.", reply_markup=admin_main_kb())
 
     @bot.message_handler(commands=["admin"])
     def cmd_admin(msg):
@@ -498,7 +505,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
         }
         state, prompt = dispatch[context]
         set_state(uid, state)
-        bot.send_message(uid, prompt, reply_markup=telebot.types.ReplyKeyboardRemove())
+        bot.send_message(uid, prompt, reply_markup=back_kb())
 
     @bot.callback_query_handler(func=lambda c: c.data.startswith("edit_"))
     def admin_edit_dispatch(call):
@@ -518,7 +525,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
         }
         state, prompt = dispatch.get(context, (States.ADMIN_EDIT_CAT_NAME, "Yangi nom:"))
         set_state(uid, state)
-        bot.send_message(uid, prompt, reply_markup=telebot.types.ReplyKeyboardRemove())
+        bot.send_message(uid, prompt, reply_markup=back_kb())
 
     @bot.callback_query_handler(func=lambda c: c.data.startswith("delete_"))
     def admin_delete_dispatch(call):
@@ -675,7 +682,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
         item_id = int(call.data.split("_")[2])
         set_data(uid, "edit_id", item_id)
         set_state(uid, States.NEWS_EDIT_TEXT)
-        bot.send_message(uid, "✏️ Yangilikning yangi matnini kiriting:", reply_markup=telebot.types.ReplyKeyboardRemove())
+        bot.send_message(uid, "📝 Yangilikning yangi matnini kiriting:", reply_markup=back_kb())
 
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.NEWS_EDIT_TEXT)
     def admin_news_edit_save(msg):
