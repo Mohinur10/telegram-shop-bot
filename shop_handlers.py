@@ -91,7 +91,7 @@ def register_shop_handlers(bot: telebot.TeleBot):
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.MAIN_MENU and m.text == "📞 Bog'lanish")
     def contact_info(msg):
         uid = msg.from_user.id
-        text = "📞 <b>Biz bilan bog'lanish:</b>\n\n📱 Telegram: @BarakaSuperMarket\n📞 Telefon: +998 90 123 45 67\n🌐 Website: BarakaSuperMarket.uz"
+        text = "📞 <b>Biz bilan bog'lanish:</b>\n\n📱 Telegram: @BozorchaSuperMarket\n📞 Telefon: +998 95 262 20 00\n🌐 Website: BarakaSuperMarket.uz"
         bot.send_message(uid, text, parse_mode="HTML")
 
     # ------------------- CATEGORY & PRODUCT -------------------
