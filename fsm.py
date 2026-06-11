@@ -46,6 +46,14 @@ class States:
     ADMIN_CHANGE_PW_NEW = "admin_change_pw_new"
     ADMIN_CHANGE_PW_CONF = "admin_change_pw_conf"
 
+    NEWS_MENU = "news_menu"
+    NEWS_ADD_TEXT = "news_add_text"
+    NEWS_ADD_PHOTO = "news_add_photo"
+    NEWS_EDIT_SELECT = "news_edit_select"
+    NEWS_EDIT_TEXT = "news_edit_text"
+    NEWS_EDIT_PHOTO = "news_edit_photo"
+    NEWS_DELETE_SELECT = "news_delete_select"
+
     MAIN_MENU = "main_menu"
     ORDER_DELIVERY = "order_delivery"
     ORDER_PAYMENT = "order_payment"

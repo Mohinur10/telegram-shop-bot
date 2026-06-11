@@ -1,5 +1,5 @@
 import telebot
-from models import Session, Admin, Category, Product, DeliverySettings, PaymentMethod, Order, OrderItem
+from models import Session, Admin, Category, Product, DeliverySettings, PaymentMethod, Order, OrderItem, News, User
 from fsm import States, get_state, set_state, clear_state, set_data, get_data, clear_data
 from keyboards import admin_main_kb, admin_crud_kb, admin_orders_kb, order_status_kb
 
@@ -480,7 +480,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
             return
         bot.answer_callback_query(call.id)
         context = get_data(uid, "current_section", "category")
-        if context not in ["category", "product", "delivery", "payment"]:
+        if context not in ["category", "product", "delivery", "payment", "news"]:
             bot.send_message(uid, "⚠️ Iltimos, avval kerakli bo'limni tanlang (masalan, 📦 Mahsulotlar).", reply_markup=admin_main_kb())
             return
         dispatch = {
@@ -488,6 +488,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
             "product":  (States.ADMIN_ADD_PROD_NAME, "📦 Yangi mahsulot nomini kiriting:"),
             "delivery": (States.ADMIN_ADD_DELIVERY_NAME, "🚚 Yetkazib berish turi nomini kiriting:"),
             "payment":  (States.ADMIN_ADD_PAY_NAME, "💳 To'lov usuli nomini kiriting:"),
+            "news":     (States.NEWS_ADD_TEXT, "📝 Yangilik matnini kiriting:"),
         }
         state, prompt = dispatch[context]
         set_state(uid, state)
@@ -596,3 +597,104 @@ def register_admin_handlers(bot: telebot.TeleBot):
         clear_data(uid)
         set_state(uid, States.ADMIN_PANEL)
         bot.send_message(uid, "✅ Parol muvaffaqiyatli o'zgartirildi.", reply_markup=admin_main_kb())
+
+    @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ADMIN_PANEL and m.text == "📢 Yangiliklar")
+    def admin_news(msg):
+        uid = msg.from_user.id
+        set_data(uid, "current_section", "news")
+        session = Session()
+        try:
+            news_items = session.query(News).all()
+            news_list = [{"id": n.id, "text": n.text[:30].replace("\n", " ")} for n in news_items]
+        finally:
+            session.close()
+        kb = telebot.types.InlineKeyboardMarkup()
+        for n in news_list:
+            kb.add(
+                telebot.types.InlineKeyboardButton(f"✏️ {n['text']}", callback_data=f"edit_news_{n['id']}"),
+                telebot.types.InlineKeyboardButton("🗑", callback_data=f"delete_news_{n['id']}"),
+            )
+        kb.add(telebot.types.InlineKeyboardButton("➕ Yangi qo'shish", callback_data="add_new"))
+        bot.send_message(uid, "📢 <b>Yangiliklar</b>:", parse_mode="HTML", reply_markup=kb)
+
+    @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.NEWS_ADD_TEXT)
+    def admin_news_add_text(msg):
+        uid = msg.from_user.id
+        set_data(uid, "new_news_text", msg.text.strip())
+        set_state(uid, States.NEWS_ADD_PHOTO)
+        bot.send_message(uid, "📷 Yangilik rasmini yuboring (yoki rasm kerak bo'lmasa 'skip' deb yozing):")
+
+    @bot.message_handler(content_types=['photo', 'text'], func=lambda m: get_state(m.from_user.id) == States.NEWS_ADD_PHOTO)
+    def admin_news_add_photo(msg):
+        uid = msg.from_user.id
+        file_id = None
+        if msg.photo:
+            file_id = msg.photo[-1].file_id
+        text = get_data(uid, "new_news_text")
+        session = Session()
+        try:
+            news = News(text=text, image_file_id=file_id)
+            session.add(news)
+            session.commit()
+            
+            # Broadcast to all users
+            users = session.query(User).all()
+            for u in users:
+                try:
+                    if file_id:
+                        bot.send_photo(u.user_id, file_id, caption=text, parse_mode="HTML")
+                    else:
+                        bot.send_message(u.user_id, text, parse_mode="HTML")
+                except Exception:
+                    pass
+        finally:
+            session.close()
+        clear_data(uid)
+        set_state(uid, States.ADMIN_PANEL)
+        bot.send_message(uid, "✅ Yangilik qo'shildi va hammaga yuborildi.", reply_markup=admin_main_kb())
+
+    @bot.callback_query_handler(func=lambda c: c.data.startswith("edit_news_"))
+    def admin_edit_news(call):
+        uid = call.from_user.id
+        if not is_admin(uid):
+            bot.answer_callback_query(call.id, "❌ Ruxsat yo'q.")
+            return
+        bot.answer_callback_query(call.id)
+        item_id = int(call.data.split("_")[2])
+        set_data(uid, "edit_id", item_id)
+        set_state(uid, States.NEWS_EDIT_TEXT)
+        bot.send_message(uid, "✏️ Yangilikning yangi matnini kiriting:", reply_markup=telebot.types.ReplyKeyboardRemove())
+
+    @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.NEWS_EDIT_TEXT)
+    def admin_news_edit_save(msg):
+        uid = msg.from_user.id
+        item_id = get_data(uid, "edit_id")
+        new_text = msg.text.strip()
+        session = Session()
+        try:
+            n = session.query(News).filter_by(id=item_id).first()
+            if n:
+                n.text = new_text
+                session.commit()
+        finally:
+            session.close()
+        set_state(uid, States.ADMIN_PANEL)
+        bot.send_message(uid, f"✅ Yangilik yangilandi", reply_markup=admin_main_kb())
+
+    @bot.callback_query_handler(func=lambda c: c.data.startswith("delete_news_"))
+    def admin_delete_news(call):
+        uid = call.from_user.id
+        if not is_admin(uid):
+            bot.answer_callback_query(call.id, "❌ Ruxsat yo'q.")
+            return
+        item_id = int(call.data.split("_")[2])
+        session = Session()
+        try:
+            n = session.query(News).filter_by(id=item_id).first()
+            if n:
+                session.delete(n)
+                session.commit()
+        finally:
+            session.close()
+        bot.answer_callback_query(call.id, "🗑 O'chirildi")
+        bot.send_message(uid, "🗑 Yangilik o'chirildi.", reply_markup=admin_main_kb())

@@ -1,6 +1,6 @@
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
-from models import Session, Category, Product, DeliverySettings, PaymentMethod, Order, OrderItem, Cart, CartItem
+from models import Session, Category, Product, DeliverySettings, PaymentMethod, Order, OrderItem, Cart, CartItem, User
 from fsm import States, get_state, set_state, clear_state, set_data, get_data, clear_data
 from keyboards import main_menu_kb, confirm_kb
 import logging
@@ -12,6 +12,15 @@ def register_shop_handlers(bot: telebot.TeleBot):
     @bot.message_handler(commands=["start"])
     def cmd_start(msg):
         uid = msg.from_user.id
+        session = Session()
+        try:
+            user = session.query(User).filter_by(user_id=uid).first()
+            if not user:
+                session.add(User(user_id=uid, first_name=msg.from_user.first_name))
+                session.commit()
+        finally:
+            session.close()
+            
         clear_state(uid)
         clear_data(uid)
         set_state(uid, States.MAIN_MENU)
@@ -56,6 +65,7 @@ def register_shop_handlers(bot: telebot.TeleBot):
                 kb.add(InlineKeyboardButton(f"❌ {ci.product.name}", callback_data=f"cart_remove_{ci.id}"),
                        InlineKeyboardButton("+", callback_data=f"cart_inc_{ci.id}"),
                        InlineKeyboardButton("-", callback_data=f"cart_dec_{ci.id}"))
+            kb.add(InlineKeyboardButton("🔙 Ortga", callback_data="back_to_products"))
             kb.add(InlineKeyboardButton("✅ Buyurtma berish", callback_data="cart_checkout"))
             kb.add(InlineKeyboardButton("🗑 Savatni tozalash", callback_data="cart_clear"))
             bot.send_message(uid, text, parse_mode="HTML", reply_markup=kb)
@@ -101,7 +111,11 @@ def register_shop_handlers(bot: telebot.TeleBot):
             for p in products:
                 kb.add(InlineKeyboardButton(f"{p.name} — {p.price:,.0f} so'm", callback_data=f"prod_{p.id}"))
             kb.add(InlineKeyboardButton("🔙 Ortga", callback_data="back_to_products"))
-            bot.edit_message_text("Mahsulotni tanlang:", chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=kb)
+            try:
+                bot.edit_message_text("Mahsulotni tanlang:", chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=kb)
+            except Exception:
+                bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
+                bot.send_message(call.message.chat.id, "Mahsulotni tanlang:", reply_markup=kb)
         finally:
             session.close()
         bot.answer_callback_query(call.id)
@@ -293,9 +307,14 @@ def register_shop_handlers(bot: telebot.TeleBot):
                 kb.add(InlineKeyboardButton(f"❌ {ci.product.name}", callback_data=f"cart_remove_{ci.id}"),
                        InlineKeyboardButton("+", callback_data=f"cart_inc_{ci.id}"),
                        InlineKeyboardButton("-", callback_data=f"cart_dec_{ci.id}"))
+            kb.add(InlineKeyboardButton("🔙 Ortga", callback_data="back_to_products"))
             kb.add(InlineKeyboardButton("✅ Buyurtma berish", callback_data="cart_checkout"))
             kb.add(InlineKeyboardButton("🗑 Savatni tozalash", callback_data="cart_clear"))
-            bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=kb)
+            try:
+                bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="HTML", reply_markup=kb)
+            except Exception:
+                bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
+                bot.send_message(call.message.chat.id, text, parse_mode="HTML", reply_markup=kb)
         finally:
             session.close()
 

@@ -35,6 +35,22 @@ class Admin(Base):
             return False
 
 
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, unique=True, nullable=False)
+    first_name = Column(String(200), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class News(Base):
+    __tablename__ = "news"
+    id = Column(Integer, primary_key=True)
+    text = Column(Text, nullable=False)
+    image_file_id = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class Category(Base):
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True)
@@ -122,8 +138,8 @@ class OrderItem(Base):
 
 
 def init_db():
-    # Drop all tables to ensure correct column types (especially BIGINT for user_id)
-    Base.metadata.drop_all(engine)
+    # Recreate tables according to current models
+
     # Recreate tables according to current models
     Base.metadata.create_all(engine)
     session = Session()

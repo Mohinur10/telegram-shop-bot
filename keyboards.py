@@ -9,6 +9,7 @@ def admin_main_kb():
         types.KeyboardButton(text="💳 To'lov usullari"),
         types.KeyboardButton(text="📋 Buyurtmalar"),
         types.KeyboardButton(text="📊 Bir kunlik statistika"),
+        types.KeyboardButton(text="📢 Yangiliklar"),
         types.KeyboardButton(text="🔑 Parolni o'zgartirish"),
         types.KeyboardButton(text="🚪 Chiqish")
     )
