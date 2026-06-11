@@ -2,6 +2,7 @@ import telebot
 from models import Session, Admin, Category, Product, DeliverySettings, PaymentMethod, Order, OrderItem, News, User
 from fsm import States, get_state, set_state, clear_state, set_data, get_data, clear_data
 from keyboards import admin_main_kb, admin_crud_kb, admin_orders_kb, order_status_kb
+from utils import upload_to_telegraph
 
 def register_admin_handlers(bot: telebot.TeleBot):
     def is_admin(uid):
@@ -153,7 +154,12 @@ def register_admin_handlers(bot: telebot.TeleBot):
     def admin_prod_add_image(msg):
         uid = msg.from_user.id
         file_id = msg.photo[-1].file_id
-        set_data(uid, "new_prod_image", file_id)
+        bot.send_message(uid, "⏳ Rasm yuklanmoqda...")
+        url = upload_to_telegraph(file_id, bot)
+        if not url:
+            bot.send_message(uid, "❌ Rasmni yuklashda xatolik yuz berdi. Iltimos qaytadan yuboring:")
+            return
+        set_data(uid, "new_prod_image", url)
         set_state(uid, States.ADMIN_ADD_PROD_CAT)
         session = Session()
         try:
@@ -629,7 +635,13 @@ def register_admin_handlers(bot: telebot.TeleBot):
         uid = msg.from_user.id
         file_id = None
         if msg.photo:
-            file_id = msg.photo[-1].file_id
+            raw_file_id = msg.photo[-1].file_id
+            bot.send_message(uid, "⏳ Rasm yuklanmoqda...")
+            file_id = upload_to_telegraph(raw_file_id, bot)
+            if not file_id:
+                bot.send_message(uid, "❌ Rasmni yuklashda xatolik yuz berdi. Iltimos qaytadan yuboring (yoki matn bo'lsa 'skip' yozing):")
+                return
+
         text = get_data(uid, "new_news_text")
         session = Session()
         try:
