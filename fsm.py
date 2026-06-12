@@ -28,6 +28,7 @@ class States:
     ADMIN_WAIT_USERNAME = "admin_wait_username"
     ADMIN_WAIT_PASSWORD = "admin_wait_password"
     ADMIN_PANEL = "admin_panel"
+    ADMIN_CRUD_MENU = "admin_crud_menu"
     ADMIN_ADD_CAT_NAME = "admin_add_cat_name"
     ADMIN_EDIT_CAT_NAME = "admin_edit_cat_name"
     ADMIN_ADD_PROD_NAME = "admin_add_prod_name"
