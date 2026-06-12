@@ -194,12 +194,25 @@ def register_shop_handlers(bot: telebot.TeleBot):
         try:
             cats = session.query(Category).all()
             if not cats:
-                bot.edit_message_text("Kategoriya mavjud emas.", chat_id=call.message.chat.id, message_id=call.message.message_id)
+                if call.message.content_type in ['photo', 'document']:
+                    bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
+                    bot.send_message(uid, "Kategoriya mavjud emas.")
+                else:
+                    bot.edit_message_text("Kategoriya mavjud emas.", chat_id=call.message.chat.id, message_id=call.message.message_id)
                 return
             kb = InlineKeyboardMarkup()
             for cat in cats:
                 kb.add(InlineKeyboardButton(cat.name, callback_data=f"cat_{cat.id}"))
-            bot.edit_message_text("Kategoriyani tanlang:", chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=kb)
+                
+            if call.message.content_type in ['photo', 'document']:
+                bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
+                bot.send_message(uid, "📂 Kategoriyani tanlang:", reply_markup=kb)
+            else:
+                try:
+                    bot.edit_message_text("📂 Kategoriyani tanlang:", chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=kb)
+                except:
+                    bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
+                    bot.send_message(uid, "📂 Kategoriyani tanlang:", reply_markup=kb)
         finally:
             session.close()
         bot.answer_callback_query(call.id)
@@ -431,11 +444,7 @@ def register_shop_handlers(bot: telebot.TeleBot):
             if not payments:
                 bot.send_message(uid, "⚠️ Hozircha to'lov usuli mavjud emas. Iltimos, admin bilan bog'laning.")
                 return
-            kb = InlineKeyboardMarkup()
-            for p in payments:
-                kb.add(InlineKeyboardButton(p.name, callback_data=f"payment_{p.id}"))
-            kb.add(InlineKeyboardButton("🔙 Orqaga", callback_data="back_to_address"))
-            bot.send_message(uid, "💳 To'lov usulini tanlang:", reply_markup=kb)
+            bot.send_message(uid, "💳 To\'lov usulini tanlang:", reply_markup=payment_kb(payments))
         finally:
             session.close()
 
