@@ -2,7 +2,7 @@ import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from models import Session, Category, Product, DeliverySettings, PaymentMethod, Order, OrderItem, Cart, CartItem, User
 from fsm import States, get_state, set_state, clear_state, set_data, get_data, clear_data
-from keyboards import main_menu_kb, confirm_kb
+from keyboards import main_menu_kb, confirm_kb, payment_kb, address_kb
 import logging
 logger = logging.getLogger(__name__)
 

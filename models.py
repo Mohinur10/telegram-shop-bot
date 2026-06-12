@@ -67,7 +67,7 @@ class Product(Base):
     price = Column(Float, nullable=False)
     image = Column(String, nullable=True)
     image_file_id = Column(String, nullable=True)  # New column for Telegram file_id
-    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id", ondelete="CASCADE"), nullable=False)
     category = relationship("Category", back_populates="products")
 
 
@@ -82,8 +82,8 @@ class Cart(Base):
 class CartItem(Base):
     __tablename__ = "cart_items"
     id = Column(Integer, primary_key=True)
-    cart_id = Column(Integer, ForeignKey("carts.id"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    cart_id = Column(Integer, ForeignKey("carts.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     quantity = Column(Integer, default=1)
     cart = relationship("Cart", back_populates="items")
     product = relationship("Product")
@@ -115,8 +115,8 @@ class Order(Base):
     address = Column(Text, nullable=True)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
-    delivery_id = Column(Integer, ForeignKey("delivery_settings.id"), nullable=True)
-    payment_id = Column(Integer, ForeignKey("payment_methods.id"), nullable=True)
+    delivery_id = Column(Integer, ForeignKey("delivery_settings.id", ondelete="SET NULL"), nullable=True)
+    payment_id = Column(Integer, ForeignKey("payment_methods.id", ondelete="SET NULL"), nullable=True)
     total = Column(Float, nullable=False, default=0.0)
     status = Column(String(50), default="pending")
     created_at = Column(DateTime, server_default=func.now())
@@ -128,8 +128,8 @@ class Order(Base):
 class OrderItem(Base):
     __tablename__ = "order_items"
     id = Column(Integer, primary_key=True)
-    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True)
     product_name = Column(String(200), nullable=False)
     quantity = Column(Integer, nullable=False, default=1)
     price = Column(Float, nullable=False)
