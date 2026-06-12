@@ -531,7 +531,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
             elif section == "product": admin_products(msg)
             elif section == "delivery": admin_delivery(msg)
             elif section == "payment": admin_payments(msg)
-            elif section == "news": admin_news_menu(msg)
+            elif section == "news": admin_news(msg)
             return
             
         if text in ["✏️ Tahrirlash", "🗑 O'chirish"]:
@@ -686,20 +686,18 @@ def register_admin_handlers(bot: telebot.TeleBot):
     def admin_news(msg):
         uid = msg.from_user.id
         set_data(uid, "current_section", "news")
+        set_state(uid, States.ADMIN_CRUD_MENU)
         session = Session()
         try:
-            news_items = session.query(News).all()
-            news_list = [{"id": n.id, "text": n.text[:30].replace("\n", " ")} for n in news_items]
+            news_items = session.query(News).order_by(News.id.desc()).limit(10).all()
+            out = "📢 <b>Yangiliklar (oxirgi 10 ta)</b>:\n\n"
+            for i, n in enumerate(news_items, 1):
+                out += f"{i}. {n.text[:30].replace('\n', ' ')}...\n"
+            if not news_items:
+                out += "Bo'sh."
+            bot.send_message(uid, out, parse_mode="HTML", reply_markup=admin_crud_kb())
         finally:
             session.close()
-        kb = telebot.types.InlineKeyboardMarkup()
-        for n in news_list:
-            kb.add(
-                telebot.types.InlineKeyboardButton(f"✏️ {n['text']}", callback_data=f"edit_news_{n['id']}"),
-                telebot.types.InlineKeyboardButton("🗑", callback_data=f"delete_news_{n['id']}"),
-            )
-        kb.add(telebot.types.InlineKeyboardButton("➕ Yangi qo'shish", callback_data="add_new"))
-        bot.send_message(uid, "📢 <b>Yangiliklar</b>:", parse_mode="HTML", reply_markup=kb)
 
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.NEWS_ADD_TEXT)
     def admin_news_add_text(msg):
