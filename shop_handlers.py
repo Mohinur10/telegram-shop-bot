@@ -65,7 +65,7 @@ def register_shop_handlers(bot: telebot.TeleBot):
                 kb.add(InlineKeyboardButton(f"❌ {ci.product.name}", callback_data=f"cart_remove_{ci.id}"),
                        InlineKeyboardButton("+", callback_data=f"cart_inc_{ci.id}"),
                        InlineKeyboardButton("-", callback_data=f"cart_dec_{ci.id}"))
-            kb.add(InlineKeyboardButton("🔙 Ortga", callback_data="back_to_products"))
+            kb.add(InlineKeyboardButton("🔙 Ortga", callback_data="back_to_categories"))
             kb.add(InlineKeyboardButton("✅ Buyurtma berish", callback_data="cart_checkout"))
             kb.add(InlineKeyboardButton("🗑 Savatni tozalash", callback_data="cart_clear"))
             bot.send_message(uid, text, parse_mode="HTML", reply_markup=kb)
@@ -110,7 +110,7 @@ def register_shop_handlers(bot: telebot.TeleBot):
             kb = InlineKeyboardMarkup()
             for p in products:
                 kb.add(InlineKeyboardButton(f"{p.name} — {p.price:,.0f} so'm", callback_data=f"prod_{p.id}"))
-            kb.add(InlineKeyboardButton("🔙 Ortga", callback_data="back_to_products"))
+            kb.add(InlineKeyboardButton("🔙 Ortga", callback_data="back_to_categories"))
             try:
                 bot.edit_message_text("Mahsulotni tanlang:", chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=kb)
             except Exception:
@@ -134,7 +134,7 @@ def register_shop_handlers(bot: telebot.TeleBot):
             text = f"📦 <b>{prod.name}</b>\n💰 Narxi: {prod.price:,.0f} so'm\n📝 {prod.description or 'Tavsif mavjud emas'}"
             kb = InlineKeyboardMarkup()
             kb.add(InlineKeyboardButton("🛒 Savatga qo'shish", callback_data=f"add_to_cart_{prod.id}"))
-            kb.add(InlineKeyboardButton("🔙 Ortga", callback_data="back_to_products"))
+            kb.add(InlineKeyboardButton("🔙 Ortga", callback_data="back_to_categories"))
             
             # Image handling: prefer Telegram file_id, fallback to legacy image URL
             if prod.image_file_id:
@@ -307,7 +307,7 @@ def register_shop_handlers(bot: telebot.TeleBot):
                 kb.add(InlineKeyboardButton(f"❌ {ci.product.name}", callback_data=f"cart_remove_{ci.id}"),
                        InlineKeyboardButton("+", callback_data=f"cart_inc_{ci.id}"),
                        InlineKeyboardButton("-", callback_data=f"cart_dec_{ci.id}"))
-            kb.add(InlineKeyboardButton("🔙 Ortga", callback_data="back_to_products"))
+            kb.add(InlineKeyboardButton("🔙 Ortga", callback_data="back_to_categories"))
             kb.add(InlineKeyboardButton("✅ Buyurtma berish", callback_data="cart_checkout"))
             kb.add(InlineKeyboardButton("🗑 Savatni tozalash", callback_data="cart_clear"))
             try:
@@ -439,15 +439,19 @@ def register_shop_handlers(bot: telebot.TeleBot):
         finally:
             session.close()
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("payment_"))
-    def order_payment(call):
-        uid = call.from_user.id
-        payment_id = int(call.data.split("_")[1])
+    @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ORDER_PAYMENT)
+    def order_payment(msg):
+        uid = msg.from_user.id
+        if msg.text == "🔙 Orqaga":
+            set_state(uid, States.ORDER_ADDRESS)
+            bot.send_message(uid, "📍 Manzilingizni qayta kiriting yoki Geolokatsiya yuboring:", reply_markup=address_kb())
+            return
+            
         session = Session()
         try:
-            payment = session.query(PaymentMethod).filter_by(id=payment_id, is_active=True).first()
+            payment = session.query(PaymentMethod).filter_by(name=msg.text, is_active=True).first()
             if not payment:
-                bot.answer_callback_query(call.id, "To'lov usuli topilmadi.")
+                bot.send_message(uid, "To'lov usuli topilmadi. Iltimos, pastdagi tugmalardan tanlang.")
                 return
             set_data(uid, "order_payment_id", payment.id)
 
@@ -462,7 +466,7 @@ def register_shop_handlers(bot: telebot.TeleBot):
             total = sum(ci.product.price * ci.quantity for ci in cart.items) + delivery.price
             delivery_price = delivery.price
 
-            items_text = "\n".join(f"• {ci.product.name} x{ci.quantity} = {ci.product.price * ci.quantity:,.0f} so'm" for ci in cart.items)
+            items_text = "\n".join(f"🔸 {ci.product.name} x{ci.quantity} = {ci.product.price * ci.quantity:,.0f} so'm" for ci in cart.items)
             confirm_text = (
                 f"📝 <b>Buyurtma ma'lumotlari</b>\n\n"
                 f"<b>Mahsulotlar:</b>\n{items_text}\n"
@@ -470,25 +474,14 @@ def register_shop_handlers(bot: telebot.TeleBot):
                 f"📞 Telefon: {phone}\n"
                 f"📍 Manzil: {address}\n"
                 f"💳 To'lov: {payment.name}\n\n"
-                f"💰 <b>Jami: {total:,.0f} so'm</b>\n\n"
-                f"Buyurtmani tasdiqlaysizmi?"
+                f"💰 <b>Jami to'lov: {total:,.0f} so'm</b>\n\n"
+                f"Barchasi to'g'rimi?"
             )
             set_data(uid, "order_total", total)
             set_state(uid, States.ORDER_CONFIRM)
             bot.send_message(uid, confirm_text, parse_mode="HTML", reply_markup=confirm_kb())
         finally:
             session.close()
-        bot.answer_callback_query(call.id)
-
-    @bot.callback_query_handler(func=lambda call: call.data == "back_to_address")
-    def back_to_address(call):
-        uid = call.from_user.id
-        set_state(uid, States.ORDER_ADDRESS)
-        kb = ReplyKeyboardMarkup(resize_keyboard=True)
-        kb.add(KeyboardButton("📍 Geolokatsiya yuborish", request_location=True))
-        kb.add(KeyboardButton("🔙 Orqaga"))
-        bot.send_message(uid, "📍 Manzilingizni qayta kiriting:", reply_markup=kb)
-        bot.answer_callback_query(call.id)
 
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ORDER_CONFIRM)
     def order_confirm(msg):
