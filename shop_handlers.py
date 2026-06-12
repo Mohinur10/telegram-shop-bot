@@ -413,41 +413,44 @@ def register_shop_handlers(bot: telebot.TeleBot):
         kb.add(KeyboardButton("🔙 Orqaga"))
         bot.send_message(uid, "📍 Manzilingizni matn shaklida kiriting yoki lokatsiya yuboring:", reply_markup=kb)
 
-    @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ORDER_ADDRESS, content_types=['text', 'location'])
-    def order_address(msg):
+    def process_order_address(msg, lat, lon, address):
         uid = msg.from_user.id
-        if msg.text == "🔙 Orqaga":
-            set_state(uid, States.ORDER_PHONE)
-            kb = ReplyKeyboardMarkup(resize_keyboard=True)
-            kb.add(KeyboardButton("📞 Telefon raqamini yuborish", request_contact=True))
-            kb.add(KeyboardButton("🔙 Orqaga"))
-            bot.send_message(uid, "📞 Telefon raqamingizni qayta kiriting:", reply_markup=kb)
-            return
-
-        if msg.location:
-            lat = msg.location.latitude
-            lon = msg.location.longitude
-            address = f"Lat: {lat}, Lon: {lon}"
-        else:
-            lat = None
-            lon = None
-            address = msg.text.strip()
         set_data(uid, "order_address", address)
         set_data(uid, "order_latitude", lat)
         set_data(uid, "order_longitude", lon)
         set_state(uid, States.ORDER_PAYMENT)
 
-        # To'lov usullarini ko'rsatish (inline)
         session = Session()
         try:
             payments = session.query(PaymentMethod).filter_by(is_active=True).all()
             if not payments:
-                bot.send_message(uid, "⚠️ Hozircha to'lov usuli mavjud emas. Iltimos, admin bilan bog'laning.")
+                bot.send_message(uid, "❌ Hozircha to'lov usuli mavjud emas. Iltimos, admin orqali to'lov usulini qo'shing.")
                 return
-            bot.send_message(uid, "💳 To\'lov usulini tanlang:", reply_markup=payment_kb(payments))
+            bot.send_message(uid, "💳 To'lov usulini tanlang:", reply_markup=payment_kb(payments))
+        except Exception as e:
+            bot.send_message(uid, f"Xatolik yuz berdi: {e}")
         finally:
             session.close()
 
+    @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ORDER_ADDRESS, content_types=['location'])
+    def order_address_loc(msg):
+        lat = msg.location.latitude
+        lon = msg.location.longitude
+        address = f"Lat: {lat}, Lon: {lon}"
+        process_order_address(msg, lat, lon, address)
+
+    @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ORDER_ADDRESS, content_types=['text'])
+    def order_address_text(msg):
+        uid = msg.from_user.id
+        if msg.text == "🔙 Orqaga":
+            set_state(uid, States.ORDER_PHONE)
+            kb = ReplyKeyboardMarkup(resize_keyboard=True)
+            kb.add(KeyboardButton("📱 Telefon raqamini yuborish", request_contact=True))
+            kb.add(KeyboardButton("🔙 Orqaga"))
+            bot.send_message(uid, "📱 Telefon raqamingizni qayta kiriting:", reply_markup=kb)
+            return
+            
+        process_order_address(msg, None, None, msg.text.strip())
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ORDER_PAYMENT)
     def order_payment(msg):
         uid = msg.from_user.id
