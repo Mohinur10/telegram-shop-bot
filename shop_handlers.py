@@ -432,12 +432,20 @@ def register_shop_handlers(bot: telebot.TeleBot):
         finally:
             session.close()
 
-    @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ORDER_ADDRESS, content_types=['location'])
+    @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ORDER_ADDRESS, content_types=['location', 'venue'])
     def order_address_loc(msg):
-        lat = msg.location.latitude
-        lon = msg.location.longitude
-        address = f"Lat: {lat}, Lon: {lon}"
-        process_order_address(msg, lat, lon, address)
+        try:
+            if msg.content_type == 'venue':
+                lat = msg.venue.location.latitude
+                lon = msg.venue.location.longitude
+                address = f"{msg.venue.title} (Lat: {lat}, Lon: {lon})"
+            else:
+                lat = msg.location.latitude
+                lon = msg.location.longitude
+                address = f"Lat: {lat}, Lon: {lon}"
+            process_order_address(msg, lat, lon, address)
+        except Exception as e:
+            bot.send_message(msg.from_user.id, f"Geolokatsiya xatoligi: {e}")
 
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ORDER_ADDRESS, content_types=['text'])
     def order_address_text(msg):
