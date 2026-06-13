@@ -58,12 +58,6 @@ def main_menu_kb():
     )
     return kb
 
-def address_kb():
-    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add(types.KeyboardButton(text="📍 Geolokatsiya yuborish", request_location=True))
-    kb.add(types.KeyboardButton(text="🔙 Orqaga"))
-    return kb
-
 def back_kb():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add(types.KeyboardButton(text="🔙 Orqaga"))

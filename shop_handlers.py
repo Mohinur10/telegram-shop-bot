@@ -2,7 +2,7 @@ import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from models import Session, Category, Product, DeliverySettings, PaymentMethod, Order, OrderItem, Cart, CartItem, User
 from fsm import States, get_state, set_state, clear_state, set_data, get_data, clear_data
-from keyboards import main_menu_kb, confirm_kb, payment_kb, address_kb
+from keyboards import main_menu_kb, confirm_kb, payment_kb, back_kb
 import logging
 logger = logging.getLogger(__name__)
 
@@ -407,11 +407,8 @@ def register_shop_handlers(bot: telebot.TeleBot):
         set_data(uid, "order_phone", phone)
         set_state(uid, States.ORDER_ADDRESS)
 
-        # Manzil so'rash (geolokatsiya yoki matn)
-        kb = ReplyKeyboardMarkup(resize_keyboard=True)
-        kb.add(KeyboardButton("📍 Geolokatsiya yuborish", request_location=True))
-        kb.add(KeyboardButton("🔙 Orqaga"))
-        bot.send_message(uid, "📍 Manzilingizni matn shaklida kiriting yoki lokatsiya yuboring:", reply_markup=kb)
+        # Manzil so'rash
+        bot.send_message(uid, "📍 Manzilingizni kiriting:", reply_markup=back_kb())
 
     def process_order_address(msg, lat, lon, address):
         uid = msg.from_user.id
@@ -432,20 +429,7 @@ def register_shop_handlers(bot: telebot.TeleBot):
         finally:
             session.close()
 
-    @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ORDER_ADDRESS, content_types=['location', 'venue'])
-    def order_address_loc(msg):
-        try:
-            if msg.content_type == 'venue':
-                lat = msg.venue.location.latitude
-                lon = msg.venue.location.longitude
-                address = f"{msg.venue.title} (Lat: {lat}, Lon: {lon})"
-            else:
-                lat = msg.location.latitude
-                lon = msg.location.longitude
-                address = f"Lat: {lat}, Lon: {lon}"
-            process_order_address(msg, lat, lon, address)
-        except Exception as e:
-            bot.send_message(msg.from_user.id, f"Geolokatsiya xatoligi: {e}")
+
 
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ORDER_ADDRESS, content_types=['text'])
     def order_address_text(msg):
@@ -464,7 +448,7 @@ def register_shop_handlers(bot: telebot.TeleBot):
         uid = msg.from_user.id
         if msg.text == "🔙 Orqaga":
             set_state(uid, States.ORDER_ADDRESS)
-            bot.send_message(uid, "📍 Manzilingizni qayta kiriting yoki Geolokatsiya yuboring:", reply_markup=address_kb())
+            bot.send_message(uid, "📍 Manzilingizni qayta kiriting:", reply_markup=back_kb())
             return
             
         session = Session()
