@@ -586,6 +586,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
             "product":  (States.ADMIN_EDIT_PROD_NAME, "✏️ Yangi mahsulot nomini kiriting:"),
             "delivery": (States.ADMIN_EDIT_DELIVERY_NAME, "✏️ Yangi nom kiriting:"),
             "payment":  (States.ADMIN_EDIT_PAY_NAME, "✏️ Yangi nom kiriting:"),
+            "news":     (States.NEWS_EDIT_TEXT, "📝 Yangilikning yangi matnini kiriting:"),
         }
         state, prompt = dispatch.get(context, (States.ADMIN_EDIT_CAT_NAME, "Yangi nom:"))
         set_state(uid, state)
@@ -605,6 +606,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
             "product":  Product,
             "delivery": DeliverySettings,
             "payment":  PaymentMethod,
+            "news":     News,
         }
         model = model_map.get(context)
         deleted_name = "?"
@@ -613,7 +615,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
             if model:
                 obj = session.query(model).filter_by(id=item_id).first()
                 if obj:
-                    deleted_name = obj.name
+                    deleted_name = getattr(obj, "name", None) or (obj.text[:20] + "..." if hasattr(obj, "text") else "?")
                     session.delete(obj)
                     session.commit()
         except Exception as e:
@@ -742,18 +744,6 @@ def register_admin_handlers(bot: telebot.TeleBot):
         set_state(uid, States.ADMIN_PANEL)
         bot.send_message(uid, "✅ Yangilik qo'shildi va hammaga yuborildi.", reply_markup=admin_main_kb())
 
-    @bot.callback_query_handler(func=lambda c: c.data.startswith("edit_news_"))
-    def admin_edit_news(call):
-        uid = call.from_user.id
-        if not is_admin(uid):
-            bot.answer_callback_query(call.id, "❌ Ruxsat yo'q.")
-            return
-        bot.answer_callback_query(call.id)
-        item_id = int(call.data.split("_")[2])
-        set_data(uid, "edit_id", item_id)
-        set_state(uid, States.NEWS_EDIT_TEXT)
-        bot.send_message(uid, "📝 Yangilikning yangi matnini kiriting:", reply_markup=back_kb())
-
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.NEWS_EDIT_TEXT)
     def admin_news_edit_save(msg):
         uid = msg.from_user.id
@@ -769,21 +759,3 @@ def register_admin_handlers(bot: telebot.TeleBot):
             session.close()
         set_state(uid, States.ADMIN_PANEL)
         bot.send_message(uid, f"✅ Yangilik yangilandi", reply_markup=admin_main_kb())
-
-    @bot.callback_query_handler(func=lambda c: c.data.startswith("delete_news_"))
-    def admin_delete_news(call):
-        uid = call.from_user.id
-        if not is_admin(uid):
-            bot.answer_callback_query(call.id, "❌ Ruxsat yo'q.")
-            return
-        item_id = int(call.data.split("_")[2])
-        session = Session()
-        try:
-            n = session.query(News).filter_by(id=item_id).first()
-            if n:
-                session.delete(n)
-                session.commit()
-        finally:
-            session.close()
-        bot.answer_callback_query(call.id, "🗑 O'chirildi")
-        bot.send_message(uid, "🗑 Yangilik o'chirildi.", reply_markup=admin_main_kb())
