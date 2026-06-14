@@ -692,7 +692,8 @@ def register_admin_handlers(bot: telebot.TeleBot):
             news_items = session.query(News).order_by(News.id.desc()).limit(10).all()
             out = "📢 <b>Yangiliklar (oxirgi 10 ta)</b>:\n\n"
             for i, n in enumerate(news_items, 1):
-                out += f"{i}. {n.text[:30].replace('\n', ' ')}...\n"
+                short = n.text[:30].replace('\n', ' ')
+                out += f"{i}. {short}...\n"
             if not news_items:
                 out += "Bo'sh."
             bot.send_message(uid, out, parse_mode="HTML", reply_markup=admin_crud_kb())
