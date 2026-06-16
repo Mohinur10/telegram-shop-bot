@@ -32,7 +32,7 @@ def register_shop_handlers(bot: telebot.TeleBot):
         uid = msg.from_user.id
         session = Session()
         try:
-            cats = session.query(Category).all()
+            cats = session.query(Category).filter_by(parent_id=None).all()
             if not cats:
                 bot.send_message(uid, "Hozircha hech qanday kategoriya mavjud emas.")
                 return
@@ -103,19 +103,28 @@ def register_shop_handlers(bot: telebot.TeleBot):
         set_data(uid, "last_cat_id", cat_id)
         session = Session()
         try:
+            subcats = session.query(Category).filter_by(parent_id=cat_id).all()
             products = session.query(Product).filter_by(category_id=cat_id).all()
-            if not products:
-                bot.answer_callback_query(call.id, "Bu kategoriyada mahsulot yo'q.")
+            if not subcats and not products:
+                bot.answer_callback_query(call.id, "Bu kategoriyada hech narsa yo'q.")
                 return
             kb = InlineKeyboardMarkup()
+            for sc in subcats:
+                kb.add(InlineKeyboardButton(f"📁 {sc.name}", callback_data=f"cat_{sc.id}"))
             for p in products:
-                kb.add(InlineKeyboardButton(f"{p.name} — {p.price:,.0f} so'm", callback_data=f"prod_{p.id}"))
-            kb.add(InlineKeyboardButton("🔙 Ortga", callback_data="back_to_categories"))
+                kb.add(InlineKeyboardButton(f"📦 {p.name} — {p.price:,.0f} so'm", callback_data=f"prod_{p.id}"))
+                
+            current_cat = session.query(Category).filter_by(id=cat_id).first()
+            if current_cat and current_cat.parent_id:
+                kb.add(InlineKeyboardButton("🔙 Ortga", callback_data=f"cat_{current_cat.parent_id}"))
+            else:
+                kb.add(InlineKeyboardButton("🔙 Ortga", callback_data="back_to_categories"))
+                
             try:
-                bot.edit_message_text("Mahsulotni tanlang:", chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=kb)
+                bot.edit_message_text("Tanlang:", chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=kb)
             except Exception:
                 bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
-                bot.send_message(call.message.chat.id, "Mahsulotni tanlang:", reply_markup=kb)
+                bot.send_message(call.message.chat.id, "Tanlang:", reply_markup=kb)
         finally:
             session.close()
         bot.answer_callback_query(call.id)
@@ -134,7 +143,7 @@ def register_shop_handlers(bot: telebot.TeleBot):
             text = f"📦 <b>{prod.name}</b>\n💰 Narxi: {prod.price:,.0f} so'm\n📝 {prod.description or 'Tavsif mavjud emas'}"
             kb = InlineKeyboardMarkup()
             kb.add(InlineKeyboardButton("🛒 Savatga qo'shish", callback_data=f"add_to_cart_{prod.id}"))
-            kb.add(InlineKeyboardButton("🔙 Ortga", callback_data="back_to_categories"))
+            kb.add(InlineKeyboardButton("🔙 Ortga", callback_data=f"cat_{prod.category_id}"))
             
             # Image handling: prefer Telegram file_id, fallback to legacy image URL
             if prod.image_file_id:
@@ -192,7 +201,7 @@ def register_shop_handlers(bot: telebot.TeleBot):
         uid = call.from_user.id
         session = Session()
         try:
-            cats = session.query(Category).all()
+            cats = session.query(Category).filter_by(parent_id=None).all()
             if not cats:
                 if call.message.content_type in ['photo', 'document']:
                     bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
