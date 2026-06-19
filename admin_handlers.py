@@ -90,8 +90,9 @@ def register_admin_handlers(bot: telebot.TeleBot):
             session.commit()
         finally:
             session.close()
-        set_state(uid, States.ADMIN_PANEL)
-        bot.send_message(uid, f"✅ Kategoriya qo'shildi: {name}", reply_markup=admin_main_kb())
+        set_state(uid, States.ADMIN_CRUD_MENU)
+        bot.send_message(uid, f"✅ Kategoriya qo'shildi: {name}")
+        admin_categories(msg)
 
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ADMIN_EDIT_CAT_NAME)
     def admin_cat_edit_save(msg):
@@ -206,8 +207,10 @@ def register_admin_handlers(bot: telebot.TeleBot):
         finally:
             session.close()
         clear_data(uid)
-        set_state(uid, States.ADMIN_PANEL)
-        bot.send_message(uid, f"✅ Mahsulot qo'shildi: {prod_name} (rasm bilan)", reply_markup=admin_main_kb())
+        set_data(uid, "current_section", "product")
+        set_state(uid, States.ADMIN_CRUD_MENU)
+        bot.send_message(uid, f"✅ Mahsulot qo'shildi: {prod_name} (rasm bilan)")
+        admin_products(msg)
 
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ADMIN_EDIT_PROD_NAME)
     def admin_prod_edit_name(msg):
@@ -267,8 +270,10 @@ def register_admin_handlers(bot: telebot.TeleBot):
         finally:
             session.close()
         clear_data(uid)
-        set_state(uid, States.ADMIN_PANEL)
-        bot.send_message(uid, f"✅ Qo'shildi: {name}", reply_markup=admin_main_kb())
+        set_data(uid, "current_section", "delivery")
+        set_state(uid, States.ADMIN_CRUD_MENU)
+        bot.send_message(uid, f"✅ Qo'shildi: {name}")
+        admin_delivery(msg)
 
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ADMIN_EDIT_DELIVERY_NAME)
     def admin_delivery_edit_name(msg):
