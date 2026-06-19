@@ -1,28 +1,90 @@
-_store = {}
+import json
+from models import Session, UserState
 
 def get_state(user_id: int) -> str | None:
-    return _store.get(user_id, {}).get("state")
+    session = Session()
+    try:
+        us = session.query(UserState).filter_by(user_id=user_id).first()
+        return us.state if us else None
+    except Exception as e:
+        print(f"[FSM Error] get_state: {e}")
+        return None
+    finally:
+        session.close()
 
 def set_state(user_id: int, state: str):
-    if user_id not in _store:
-        _store[user_id] = {"state": state, "data": {}}
-    else:
-        _store[user_id]["state"] = state
+    session = Session()
+    try:
+        us = session.query(UserState).filter_by(user_id=user_id).first()
+        if not us:
+            us = UserState(user_id=user_id, state=state, data_json="{}")
+            session.add(us)
+        else:
+            us.state = state
+        session.commit()
+    except Exception as e:
+        print(f"[FSM Error] set_state: {e}")
+        session.rollback()
+    finally:
+        session.close()
 
 def clear_state(user_id: int):
-    _store.pop(user_id, None)
+    session = Session()
+    try:
+        us = session.query(UserState).filter_by(user_id=user_id).first()
+        if us:
+            session.delete(us)
+            session.commit()
+    except Exception as e:
+        print(f"[FSM Error] clear_state: {e}")
+        session.rollback()
+    finally:
+        session.close()
 
 def set_data(user_id: int, key: str, value):
-    if user_id not in _store:
-        _store[user_id] = {"state": None, "data": {}}
-    _store[user_id]["data"][key] = value
+    session = Session()
+    try:
+        us = session.query(UserState).filter_by(user_id=user_id).first()
+        if not us:
+            us = UserState(user_id=user_id, state=None, data_json="{}")
+            session.add(us)
+        
+        data = json.loads(us.data_json or "{}")
+        data[key] = value
+        us.data_json = json.dumps(data)
+        session.commit()
+    except Exception as e:
+        print(f"[FSM Error] set_data: {e}")
+        session.rollback()
+    finally:
+        session.close()
 
 def get_data(user_id: int, key: str, default=None):
-    return _store.get(user_id, {}).get("data", {}).get(key, default)
+    session = Session()
+    try:
+        us = session.query(UserState).filter_by(user_id=user_id).first()
+        if us and us.data_json:
+            data = json.loads(us.data_json)
+            return data.get(key, default)
+        return default
+    except Exception as e:
+        print(f"[FSM Error] get_data: {e}")
+        return default
+    finally:
+        session.close()
 
 def clear_data(user_id: int):
-    if user_id in _store:
-        _store[user_id]["data"] = {}
+    session = Session()
+    try:
+        us = session.query(UserState).filter_by(user_id=user_id).first()
+        if us:
+            us.data_json = "{}"
+            session.commit()
+    except Exception as e:
+        print(f"[FSM Error] clear_data: {e}")
+        session.rollback()
+    finally:
+        session.close()
 
 class States:
     ADMIN_WAIT_USERNAME = "admin_wait_username"

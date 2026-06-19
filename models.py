@@ -139,6 +139,11 @@ class OrderItem(Base):
     price = Column(Float, nullable=False)
     order = relationship("Order", back_populates="items")
     product = relationship("Product")
+class UserState(Base):
+    __tablename__ = "user_states"
+    user_id = Column(BigInteger, primary_key=True)
+    state = Column(String(255), nullable=True)
+    data_json = Column(Text, nullable=True, default="{}")
 
 
 def init_db():
