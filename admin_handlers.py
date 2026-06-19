@@ -72,7 +72,8 @@ def register_admin_handlers(bot: telebot.TeleBot):
             cats = session.query(Category).all()
             out = "📂 <b>Kategoriyalar</b>:\n\n"
             for i, c in enumerate(cats, 1):
-                out += f"{i}. {c.name}\n"
+                parent_info = f" (Ichida: {c.parent.name})" if c.parent else ""
+                out += f"{i}. {c.name}{parent_info}\n"
             if not cats:
                 out += "Bo'sh."
             bot.send_message(uid, out, parse_mode="HTML", reply_markup=admin_crud_kb())
@@ -83,13 +84,45 @@ def register_admin_handlers(bot: telebot.TeleBot):
     def admin_cat_add_save(msg):
         uid = msg.from_user.id
         name = msg.text.strip()
+        set_data(uid, "new_cat_name", name)
+        set_state(uid, States.ADMIN_ADD_CAT_PARENT)
+        
         session = Session()
         try:
-            cat = Category(name=name)
+            cats = session.query(Category).all()
+            cat_names = [c.name for c in cats]
+        finally:
+            session.close()
+            
+        kb = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+        kb.row("Asosiy kategoriya")
+        for cname in cat_names:
+            kb.row(cname)
+            
+        bot.send_message(uid, "📂 Bu kategoriya qaysi kategoriyaga tegishli? (Asosiy kategoriya uchun 'Asosiy kategoriya' ni tanlang)", reply_markup=kb)
+
+    @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ADMIN_ADD_CAT_PARENT)
+    def admin_cat_add_parent(msg):
+        uid = msg.from_user.id
+        parent_name = msg.text.strip()
+        name = get_data(uid, "new_cat_name")
+        
+        session = Session()
+        try:
+            parent_id = None
+            if parent_name != "Asosiy kategoriya":
+                parent_cat = session.query(Category).filter_by(name=parent_name).first()
+                if not parent_cat:
+                    bot.send_message(uid, "❌ Kategoriya topilmadi. Qaytadan tanlang:")
+                    return
+                parent_id = parent_cat.id
+                
+            cat = Category(name=name, parent_id=parent_id)
             session.add(cat)
             session.commit()
         finally:
             session.close()
+        clear_data(uid)
         set_state(uid, States.ADMIN_CRUD_MENU)
         bot.send_message(uid, f"✅ Kategoriya qo'shildi: {name}")
         admin_categories(msg)

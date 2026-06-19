@@ -52,5 +52,11 @@ with engine.connect() as conn:
     except Exception as e:
         print("orders payment_id", e)
 
+    # categories.parent_id
+    try:
+        conn.execute(text("ALTER TABLE categories ADD COLUMN parent_id INTEGER REFERENCES categories(id) ON DELETE CASCADE;"))
+    except Exception as e:
+        print("categories parent_id", e)
+
     conn.commit()
     print("Database constraints updated successfully.")

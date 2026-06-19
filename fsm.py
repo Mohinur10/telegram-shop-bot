@@ -30,6 +30,7 @@ class States:
     ADMIN_PANEL = "admin_panel"
     ADMIN_CRUD_MENU = "admin_crud_menu"
     ADMIN_ADD_CAT_NAME = "admin_add_cat_name"
+    ADMIN_ADD_CAT_PARENT = "admin_add_cat_parent"
     ADMIN_EDIT_CAT_NAME = "admin_edit_cat_name"
     ADMIN_ADD_PROD_NAME = "admin_add_prod_name"
     ADMIN_ADD_PROD_DESC = "admin_add_prod_desc"
