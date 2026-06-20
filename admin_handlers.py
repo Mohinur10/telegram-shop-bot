@@ -107,24 +107,50 @@ def register_admin_handlers(bot: telebot.TeleBot):
         parent_name = msg.text.strip()
         name = get_data(uid, "new_cat_name")
         
+        if not name:
+            bot.send_message(uid, "❌ Kategoriya nomi topilmadi. Qaytadan boshlang:", reply_markup=admin_main_kb())
+            set_state(uid, States.ADMIN_PANEL)
+            return
+        
         session = Session()
         try:
             parent_id = None
             if parent_name != "Asosiy kategoriya":
                 parent_cat = session.query(Category).filter_by(name=parent_name).first()
                 if not parent_cat:
-                    bot.send_message(uid, "❌ Kategoriya topilmadi. Qaytadan tanlang:")
+                    session.close()
+                    # Re-show parent selection keyboard
+                    inner_session = Session()
+                    try:
+                        cats = inner_session.query(Category).all()
+                        cat_names = [c.name for c in cats]
+                    finally:
+                        inner_session.close()
+                    kb = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+                    kb.row("Asosiy kategoriya")
+                    for cname in cat_names:
+                        kb.row(cname)
+                    bot.send_message(uid, "❌ Kategoriya topilmadi. Qaytadan tanlang:", reply_markup=kb)
                     return
                 parent_id = parent_cat.id
                 
             cat = Category(name=name, parent_id=parent_id)
             session.add(cat)
             session.commit()
-        finally:
+            added_name = cat.name
+        except Exception as e:
+            session.rollback()
             session.close()
+            bot.send_message(uid, f"❌ Kategoriya qo'shishda xatolik yuz berdi: {e}")
+            return
+        finally:
+            try:
+                session.close()
+            except Exception:
+                pass
         clear_data(uid)
         set_state(uid, States.ADMIN_CRUD_MENU)
-        bot.send_message(uid, f"✅ Kategoriya qo'shildi: {name}")
+        bot.send_message(uid, f"✅ Kategoriya qo'shildi: {added_name}")
         admin_categories(msg)
 
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ADMIN_EDIT_CAT_NAME)
@@ -577,6 +603,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
             session = Session()
             try:
                 kb = telebot.types.InlineKeyboardMarkup()
+                items = []
                 if section == "category":
                     items = session.query(Category).all()
                     for c in items:
@@ -597,14 +624,19 @@ def register_admin_handlers(bot: telebot.TeleBot):
                     items = session.query(News).order_by(News.id.desc()).limit(10).all()
                     for n in items:
                         kb.add(telebot.types.InlineKeyboardButton(f"{n.text[:20]}...", callback_data=f"{action_prefix}_{n.id}"))
-                
-                # We should NOT use len() on items because it can be an iterator or list. It's a list here.
-                if len(items) == 0:
-                    bot.send_message(uid, "Hech narsa yo'q.")
+                else:
+                    bot.send_message(uid, "⚠️ Noto'g'ri bo'lim tanlandi.")
                     return
-                bot.send_message(uid, f"Qaysi birini {text.lower().split()[1]} xohlaysiz? Tanlang:", reply_markup=kb)
+                
+                items_count = len(items)
             finally:
                 session.close()
+            
+            if items_count == 0:
+                bot.send_message(uid, "Hech narsa yo'q.")
+                return
+            action_word = "tahrirlash" if text == "✏️ Tahrirlash" else "o'chirish"
+            bot.send_message(uid, f"Qaysi birini {action_word} xohlaysiz? Tanlang:", reply_markup=kb)
             return
             
         bot.send_message(uid, "Iltimos, pastdagi tugmalardan birini tanlang.")
