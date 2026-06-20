@@ -68,21 +68,48 @@ def register_admin_handlers(bot: telebot.TeleBot):
         try:
             cats = session.query(Category).all()
             cat_map = {c.id: c.name for c in cats}
-            out = "📂 <b>Kategoriyalar</b>:\n\n"
+
+            lines = []
             if not cats:
-                out += "Bo'sh."
+                lines.append("Bo'sh.")
             else:
                 for i, c in enumerate(cats, 1):
                     if c.parent_id and c.parent_id in cat_map:
                         parent_info = f" (Ichida: {cat_map[c.parent_id]})"
                     else:
                         parent_info = ""
-                    out += f"{i}. {c.name}{parent_info}\n"
+                    lines.append(f"{i}. {c.name}{parent_info}")
+
             set_data(uid, "current_section", "category")
             set_state(uid, States.ADMIN_CRUD_MENU)
-            send_msg_func(out, parse_mode="HTML", reply_markup=admin_crud_kb())
+
+            # Telegram xabar limiti: 4096 belgi. Uzun ro'yxatni bo'laklarga ajratamiz
+            LIMIT = 3800
+            header = "📂 <b>Kategoriyalar</b>:\n\n"
+            chunks = []
+            current = header
+            for line in lines:
+                if len(current) + len(line) + 1 > LIMIT:
+                    chunks.append(current)
+                    current = line + "\n"
+                else:
+                    current += line + "\n"
+            if current.strip():
+                chunks.append(current)
+
+            if not chunks:
+                chunks = [header + "Bo'sh."]
+
+            # Oxirgi bo'lakka klaviatura biriktiriladi
+            for idx, chunk in enumerate(chunks):
+                is_last = (idx == len(chunks) - 1)
+                if is_last:
+                    send_msg_func(chunk, parse_mode="HTML", reply_markup=admin_crud_kb())
+                else:
+                    bot.send_message(uid, chunk, parse_mode="HTML")
+
         except Exception as e:
-            send_msg_func(f"❌ Kategoriyalarni yuklashda xatolik: {e}")
+            send_msg_func(f"❌ Xatolik: {e}")
         finally:
             session.close()
 
