@@ -62,23 +62,35 @@ def register_admin_handlers(bot: telebot.TeleBot):
         set_data(uid, "daily_stats_sent", False)
         bot.send_message(uid, "👋 Chiqdingiz.", reply_markup=telebot.types.ReplyKeyboardRemove())
 
-    @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ADMIN_PANEL and m.text == "📂 Kategoriyalar")
-    def admin_categories(msg):
-        uid = msg.from_user.id
-        set_data(uid, "current_section", "category")
-        set_state(uid, States.ADMIN_CRUD_MENU)
+    def _show_categories(uid, bot, send_msg_func):
+        """Helper: kategoriyalar ro'yxatini ko'rsatadi."""
         session = Session()
         try:
             cats = session.query(Category).all()
+            cat_map = {c.id: c.name for c in cats}
             out = "📂 <b>Kategoriyalar</b>:\n\n"
-            for i, c in enumerate(cats, 1):
-                parent_info = f" (Ichida: {c.parent.name})" if c.parent else ""
-                out += f"{i}. {c.name}{parent_info}\n"
             if not cats:
                 out += "Bo'sh."
-            bot.send_message(uid, out, parse_mode="HTML", reply_markup=admin_crud_kb())
+            else:
+                for i, c in enumerate(cats, 1):
+                    if c.parent_id and c.parent_id in cat_map:
+                        parent_info = f" (Ichida: {cat_map[c.parent_id]})"
+                    else:
+                        parent_info = ""
+                    out += f"{i}. {c.name}{parent_info}\n"
+            set_data(uid, "current_section", "category")
+            set_state(uid, States.ADMIN_CRUD_MENU)
+            send_msg_func(out, parse_mode="HTML", reply_markup=admin_crud_kb())
+        except Exception as e:
+            send_msg_func(f"❌ Kategoriyalarni yuklashda xatolik: {e}")
         finally:
             session.close()
+
+    @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ADMIN_PANEL and m.text == "📂 Kategoriyalar")
+    def admin_categories(msg):
+        uid = msg.from_user.id
+        _show_categories(uid, bot, lambda text, **kwargs: bot.send_message(uid, text, **kwargs))
+
 
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ADMIN_ADD_CAT_NAME)
     def admin_cat_add_save(msg):
@@ -153,10 +165,10 @@ def register_admin_handlers(bot: telebot.TeleBot):
         finally:
             s3.close()
 
-        clear_data(uid)
+        set_data(uid, "current_section", "category")
         set_state(uid, States.ADMIN_CRUD_MENU)
         bot.send_message(uid, f"✅ Kategoriya qo'shildi: {added_name}")
-        admin_categories(msg)
+        _show_categories(uid, bot, lambda text, **kwargs: bot.send_message(uid, text, **kwargs))
 
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ADMIN_EDIT_CAT_NAME)
     def admin_cat_edit_save(msg):
@@ -359,6 +371,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
     def admin_payments(msg):
         uid = msg.from_user.id
         set_data(uid, "current_section", "payment")
+        set_state(uid, States.ADMIN_CRUD_MENU)
         session = Session()
         try:
             items = session.query(PaymentMethod).all()
@@ -369,10 +382,11 @@ def register_admin_handlers(bot: telebot.TeleBot):
         for p in item_list:
             state = "✅" if p["active"] else "❌"
             kb.add(
-                telebot.types.InlineKeyboardButton(f"✏️ {state} {p['name']}", callback_data=f"edit_{p['id']}"),
-                telebot.types.InlineKeyboardButton("🗑", callback_data=f"delete_{p['id']}"),
+                telebot.types.InlineKeyboardButton(f"✏️ {state} {p['name']}", callback_data=f"edit_pay_{p['id']}"),
+                telebot.types.InlineKeyboardButton("🗑", callback_data=f"delete_pay_{p['id']}"),
             )
         kb.add(telebot.types.InlineKeyboardButton("➕ Yangi qo'shish", callback_data="add_new"))
+        kb.add(telebot.types.InlineKeyboardButton("🔙 Ortga", callback_data="admin_back"))
         bot.send_message(uid, "💳 <b>To'lov usullari</b>:", parse_mode="HTML", reply_markup=kb)
 
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ADMIN_ADD_PAY_NAME)
@@ -569,18 +583,35 @@ def register_admin_handlers(bot: telebot.TeleBot):
         set_state(uid, state)
         bot.send_message(uid, prompt, reply_markup=back_kb())
 
+    @bot.callback_query_handler(func=lambda c: c.data == "admin_back")
+    def admin_back_callback(call):
+        uid = call.from_user.id
+        if not is_admin(uid):
+            bot.answer_callback_query(call.id, "❌ Ruxsat yo'q.")
+            return
+        bot.answer_callback_query(call.id)
+        clear_data(uid)
+        set_state(uid, States.ADMIN_PANEL)
+        bot.send_message(uid, "🔙 Bosh menyuga qaytdingiz.", reply_markup=admin_main_kb())
+
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ADMIN_CRUD_MENU and not (m.text or "").startswith("/"))
     def admin_crud_actions(msg):
         uid = msg.from_user.id
         text = msg.text
         section = get_data(uid, "current_section")
-        
+
         if text == "🔙 Ortga":
             clear_data(uid)
             set_state(uid, States.ADMIN_PANEL)
             bot.send_message(uid, "🔙 Bosh menyuga qaytdingiz.", reply_markup=admin_main_kb())
             return
-            
+
+        # Agar section yo'q bo'lsa — adminni bosh menyuga qaytaramiz
+        if not section:
+            set_state(uid, States.ADMIN_PANEL)
+            bot.send_message(uid, "⚠️ Bo'lim aniqlanmadi. Bosh menyuga qaytdingiz.", reply_markup=admin_main_kb())
+            return
+
         if text == "➕ Qo'shish":
             dispatch = {
                 "category": (States.ADMIN_ADD_CAT_NAME, "📂 Yangi kategoriya nomini kiriting:"),
@@ -593,16 +624,25 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 state, prompt = dispatch[section]
                 set_state(uid, state)
                 bot.send_message(uid, prompt, reply_markup=back_kb())
+            else:
+                bot.send_message(uid, "⚠️ Noma'lum bo'lim.", reply_markup=admin_crud_kb())
             return
-            
+
         if text == "📋 Ko'rish":
-            if section == "category": admin_categories(msg)
-            elif section == "product": admin_products(msg)
-            elif section == "delivery": admin_delivery(msg)
-            elif section == "payment": admin_payments(msg)
-            elif section == "news": admin_news(msg)
+            if section == "category":
+                _show_categories(uid, bot, lambda t, **kw: bot.send_message(uid, t, **kw))
+            elif section == "product":
+                admin_products(msg)
+            elif section == "delivery":
+                admin_delivery(msg)
+            elif section == "payment":
+                admin_payments(msg)
+            elif section == "news":
+                admin_news(msg)
+            else:
+                bot.send_message(uid, "⚠️ Noma'lum bo'lim.", reply_markup=admin_crud_kb())
             return
-            
+
         if text in ["✏️ Tahrirlash", "🗑 O'chirish"]:
             action_prefix = "edit" if text == "✏️ Tahrirlash" else "delete"
             kb = telebot.types.InlineKeyboardMarkup()
@@ -612,35 +652,35 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 if section == "category":
                     items = session.query(Category).all()
                     for c in items:
-                        kb.add(telebot.types.InlineKeyboardButton(c.name, callback_data=f"{action_prefix}_{c.id}"))
+                        kb.add(telebot.types.InlineKeyboardButton(c.name, callback_data=f"{action_prefix}_cat_{c.id}"))
                 elif section == "product":
                     items = session.query(Product).all()
                     for p in items:
-                        kb.add(telebot.types.InlineKeyboardButton(p.name, callback_data=f"{action_prefix}_{p.id}"))
+                        kb.add(telebot.types.InlineKeyboardButton(p.name, callback_data=f"{action_prefix}_prod_{p.id}"))
                 elif section == "delivery":
                     items = session.query(DeliverySettings).all()
                     for d in items:
-                        kb.add(telebot.types.InlineKeyboardButton(d.name, callback_data=f"{action_prefix}_{d.id}"))
+                        kb.add(telebot.types.InlineKeyboardButton(d.name, callback_data=f"{action_prefix}_del_{d.id}"))
                 elif section == "payment":
                     items = session.query(PaymentMethod).all()
                     for p in items:
-                        kb.add(telebot.types.InlineKeyboardButton(p.name, callback_data=f"{action_prefix}_{p.id}"))
+                        kb.add(telebot.types.InlineKeyboardButton(p.name, callback_data=f"{action_prefix}_pay_{p.id}"))
                 elif section == "news":
                     items = session.query(News).order_by(News.id.desc()).limit(10).all()
                     for n in items:
-                        kb.add(telebot.types.InlineKeyboardButton(f"{n.text[:20]}...", callback_data=f"{action_prefix}_{n.id}"))
+                        kb.add(telebot.types.InlineKeyboardButton(f"{n.text[:20]}...", callback_data=f"{action_prefix}_news_{n.id}"))
                 items_count = len(items)
             finally:
                 session.close()
 
             if items_count == 0:
-                bot.send_message(uid, "Hech narsa yo'q.")
+                bot.send_message(uid, "Hech narsa yo'q.", reply_markup=admin_crud_kb())
             else:
                 action_word = "tahrirlash" if text == "✏️ Tahrirlash" else "o'chirish"
                 bot.send_message(uid, f"Qaysi birini {action_word} xohlaysiz? Tanlang:", reply_markup=kb)
             return
-            
-        bot.send_message(uid, "Iltimos, pastdagi tugmalardan birini tanlang.")
+
+        bot.send_message(uid, "Iltimos, pastdagi tugmalardan birini tanlang.", reply_markup=admin_crud_kb())
 
     @bot.callback_query_handler(func=lambda c: c.data.startswith("edit_"))
     def admin_edit_dispatch(call):
@@ -649,9 +689,19 @@ def register_admin_handlers(bot: telebot.TeleBot):
             bot.answer_callback_query(call.id, "❌ Ruxsat yo'q.")
             return
         bot.answer_callback_query(call.id)
-        item_id = int(call.data.split("_")[1])
+        # Format: edit_{section}_{id}  masalan: edit_cat_5, edit_prod_3
+        parts = call.data.split("_")
+        # parts[0]=edit, parts[1]=section_type, parts[2]=id
+        if len(parts) < 3:
+            bot.send_message(uid, "❌ Noto'g'ri callback format.")
+            return
+        section_code = parts[1]   # cat, prod, del, pay, news
+        item_id = int(parts[2])
         set_data(uid, "edit_id", item_id)
-        context = get_data(uid, "current_section", "category")
+        # section_code dan section ni aniqlash
+        code_to_section = {"cat": "category", "prod": "product", "del": "delivery", "pay": "payment", "news": "news"}
+        context = code_to_section.get(section_code, get_data(uid, "current_section", "category"))
+        set_data(uid, "current_section", context)
         dispatch = {
             "category": (States.ADMIN_EDIT_CAT_NAME, "✏️ Yangi kategoriya nomini kiriting:"),
             "product":  (States.ADMIN_EDIT_PROD_NAME, "✏️ Yangi mahsulot nomini kiriting:"),
@@ -670,8 +720,17 @@ def register_admin_handlers(bot: telebot.TeleBot):
             bot.answer_callback_query(call.id, "❌ Ruxsat yo'q.")
             return
         bot.answer_callback_query(call.id)
-        item_id = int(call.data.split("_")[1])
-        context = get_data(uid, "current_section", "category")
+        # Format: delete_{section}_{id}  masalan: delete_cat_5, delete_prod_3
+        parts = call.data.split("_")
+        if len(parts) < 3:
+            bot.send_message(uid, "❌ Noto'g'ri callback format.")
+            return
+        section_code = parts[1]   # cat, prod, del, pay, news
+        item_id = int(parts[2])
+        # section_code dan context ni aniqlash
+        code_to_section = {"cat": "category", "prod": "product", "del": "delivery", "pay": "payment", "news": "news"}
+        context = code_to_section.get(section_code, get_data(uid, "current_section", "category"))
+        set_data(uid, "current_section", context)
         model_map = {
             "category": Category,
             "product":  Product,
@@ -697,8 +756,8 @@ def register_admin_handlers(bot: telebot.TeleBot):
             session.close()
         set_state(uid, States.ADMIN_CRUD_MENU)
         bot.send_message(uid, f"🗑 O'chirildi: {deleted_name}", reply_markup=admin_crud_kb())
-        # Call admin_crud_actions to re-render the list
-        mock_msg = type('MockMsg', (object,), {'from_user': call.from_user, 'text': "📋 Ko'rish", 'message_id': call.message.message_id})
+        # Ro'yxatni qayta ko'rsatish
+        mock_msg = type('MockMsg', (object,), {'from_user': call.from_user, 'text': "📋 Ko'rish", 'message_id': call.message.message_id})()
         admin_crud_actions(mock_msg)
 
     @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ADMIN_PANEL and m.text == "🔑 Parolni o'zgartirish")
