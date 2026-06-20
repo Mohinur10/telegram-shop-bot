@@ -106,48 +106,53 @@ def register_admin_handlers(bot: telebot.TeleBot):
         uid = msg.from_user.id
         parent_name = msg.text.strip()
         name = get_data(uid, "new_cat_name")
-        
+
         if not name:
             bot.send_message(uid, "❌ Kategoriya nomi topilmadi. Qaytadan boshlang:", reply_markup=admin_main_kb())
             set_state(uid, States.ADMIN_PANEL)
             return
-        
-        session = Session()
+
+        # 1. Agar ota-kategoriya tanlangan bo'lsa, uni bazadan olamiz
+        parent_id = None
+        if parent_name != "Asosiy kategoriya":
+            s1 = Session()
+            try:
+                parent_cat = s1.query(Category).filter_by(name=parent_name).first()
+                if parent_cat:
+                    parent_id = parent_cat.id
+            finally:
+                s1.close()
+
+            if parent_id is None:
+                # Topilmadi — keyboard bilan xato xabar qaytaramiz
+                s2 = Session()
+                try:
+                    cats = s2.query(Category).all()
+                    cat_names = [c.name for c in cats]
+                finally:
+                    s2.close()
+                kb = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+                kb.row("Asosiy kategoriya")
+                for cname in cat_names:
+                    kb.row(cname)
+                bot.send_message(uid, "❌ Kategoriya topilmadi. Qaytadan tanlang:", reply_markup=kb)
+                return
+
+        # 2. Yangi kategoriyani saqlaymiz
+        added_name = None
+        s3 = Session()
         try:
-            parent_id = None
-            if parent_name != "Asosiy kategoriya":
-                parent_cat = session.query(Category).filter_by(name=parent_name).first()
-                if not parent_cat:
-                    session.close()
-                    # Re-show parent selection keyboard
-                    inner_session = Session()
-                    try:
-                        cats = inner_session.query(Category).all()
-                        cat_names = [c.name for c in cats]
-                    finally:
-                        inner_session.close()
-                    kb = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-                    kb.row("Asosiy kategoriya")
-                    for cname in cat_names:
-                        kb.row(cname)
-                    bot.send_message(uid, "❌ Kategoriya topilmadi. Qaytadan tanlang:", reply_markup=kb)
-                    return
-                parent_id = parent_cat.id
-                
             cat = Category(name=name, parent_id=parent_id)
-            session.add(cat)
-            session.commit()
+            s3.add(cat)
+            s3.commit()
             added_name = cat.name
         except Exception as e:
-            session.rollback()
-            session.close()
-            bot.send_message(uid, f"❌ Kategoriya qo'shishda xatolik yuz berdi: {e}")
+            s3.rollback()
+            bot.send_message(uid, f"❌ Kategoriya qo'shishda xatolik: {e}")
             return
         finally:
-            try:
-                session.close()
-            except Exception:
-                pass
+            s3.close()
+
         clear_data(uid)
         set_state(uid, States.ADMIN_CRUD_MENU)
         bot.send_message(uid, f"✅ Kategoriya qo'shildi: {added_name}")
@@ -600,43 +605,39 @@ def register_admin_handlers(bot: telebot.TeleBot):
             
         if text in ["✏️ Tahrirlash", "🗑 O'chirish"]:
             action_prefix = "edit" if text == "✏️ Tahrirlash" else "delete"
+            kb = telebot.types.InlineKeyboardMarkup()
+            items = []
             session = Session()
             try:
-                kb = telebot.types.InlineKeyboardMarkup()
-                items = []
                 if section == "category":
                     items = session.query(Category).all()
                     for c in items:
-                        kb.add(telebot.types.InlineKeyboardButton(f"{c.name}", callback_data=f"{action_prefix}_{c.id}"))
+                        kb.add(telebot.types.InlineKeyboardButton(c.name, callback_data=f"{action_prefix}_{c.id}"))
                 elif section == "product":
                     items = session.query(Product).all()
                     for p in items:
-                        kb.add(telebot.types.InlineKeyboardButton(f"{p.name}", callback_data=f"{action_prefix}_{p.id}"))
+                        kb.add(telebot.types.InlineKeyboardButton(p.name, callback_data=f"{action_prefix}_{p.id}"))
                 elif section == "delivery":
                     items = session.query(DeliverySettings).all()
                     for d in items:
-                        kb.add(telebot.types.InlineKeyboardButton(f"{d.name}", callback_data=f"{action_prefix}_{d.id}"))
+                        kb.add(telebot.types.InlineKeyboardButton(d.name, callback_data=f"{action_prefix}_{d.id}"))
                 elif section == "payment":
                     items = session.query(PaymentMethod).all()
                     for p in items:
-                        kb.add(telebot.types.InlineKeyboardButton(f"{p.name}", callback_data=f"{action_prefix}_{p.id}"))
+                        kb.add(telebot.types.InlineKeyboardButton(p.name, callback_data=f"{action_prefix}_{p.id}"))
                 elif section == "news":
                     items = session.query(News).order_by(News.id.desc()).limit(10).all()
                     for n in items:
                         kb.add(telebot.types.InlineKeyboardButton(f"{n.text[:20]}...", callback_data=f"{action_prefix}_{n.id}"))
-                else:
-                    bot.send_message(uid, "⚠️ Noto'g'ri bo'lim tanlandi.")
-                    return
-                
                 items_count = len(items)
             finally:
                 session.close()
-            
+
             if items_count == 0:
                 bot.send_message(uid, "Hech narsa yo'q.")
-                return
-            action_word = "tahrirlash" if text == "✏️ Tahrirlash" else "o'chirish"
-            bot.send_message(uid, f"Qaysi birini {action_word} xohlaysiz? Tanlang:", reply_markup=kb)
+            else:
+                action_word = "tahrirlash" if text == "✏️ Tahrirlash" else "o'chirish"
+                bot.send_message(uid, f"Qaysi birini {action_word} xohlaysiz? Tanlang:", reply_markup=kb)
             return
             
         bot.send_message(uid, "Iltimos, pastdagi tugmalardan birini tanlang.")
