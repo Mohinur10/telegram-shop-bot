@@ -9,7 +9,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
         state = get_state(uid)
         return state == States.ADMIN_PANEL or (state or "").startswith("admin_") or (state or "").startswith("news_")
 
-    @bot.message_handler(func=lambda m: m.text in ["🔙 Orqaga", "🔙 Ortga"] and is_admin(m.from_user.id))
+    @bot.message_handler(func=lambda m: m.text in ["🔙 Orqaga", "🔙 Ortga"] and is_admin(m.from_user.id) and not (m.text or "").startswith("/"))
     def admin_global_back(msg):
         uid = msg.from_user.id
         clear_data(uid)
@@ -569,7 +569,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
         set_state(uid, state)
         bot.send_message(uid, prompt, reply_markup=back_kb())
 
-    @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ADMIN_CRUD_MENU)
+    @bot.message_handler(func=lambda m: get_state(m.from_user.id) == States.ADMIN_CRUD_MENU and not (m.text or "").startswith("/"))
     def admin_crud_actions(msg):
         uid = msg.from_user.id
         text = msg.text

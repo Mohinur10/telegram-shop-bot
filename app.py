@@ -49,8 +49,8 @@ logger.info("Initializing database...")
 init_db()
 logger.info("Database ready.")
 
+register_shop_handlers(bot)   # /start shu yerda — har doim birinchi bo'lishi kerak
 register_admin_handlers(bot)
-register_shop_handlers(bot)
 
 # ---------- BOT POLLING ALOHIDA THREADDA ----------
 bot_thread_started = False
